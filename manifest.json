@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "Monitoramento de Privacidade",
   "version": "1.0.0",
-  "description": "Detecta ameaças à privacidade e rastreamento na navegação web.",
+  "description": "Detecta ameacas a privacidade e rastreamento na navegacao web.",
 
   "permissions": [
     "webRequest",
@@ -13,10 +13,6 @@
     "activeTab",
     "<all_urls>"
   ],
-
-  "data_collection_permissions": {
-    "collects_user_data": false
-  },
 
   "background": {
     "scripts": ["privacy.js"],
@@ -31,7 +27,11 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "privacy-monitor@insper.edu.br",
-      "strict_min_version": "91.0"
+      "strict_min_version": "91.0",
+      "data_collection_permissions": {
+        "required": [],
+        "optional": []
+      }
     }
   }
 }
