@@ -107,7 +107,7 @@ browser.webRequest.onHeadersReceived.addListener(
   ["responseHeaders"]
 );
 
-// Detecta redirecionamentos suspeitos (hijacking)
+// Detecta redirecionamentos suspeitos
 browser.webRequest.onBeforeRedirect.addListener(
   (details) => {
     const { tabId, url, redirectUrl } = details;
@@ -126,6 +126,34 @@ browser.webRequest.onBeforeRedirect.addListener(
   { urls: ["<all_urls>"] }
 );
 
+// Recebe mensagens do content script
+browser.runtime.onMessage.addListener((message, sender) => {
+  const tabId = sender.tab ? sender.tab.id : -1;
+
+  if (message.action === "fingerprintDetectado") {
+    if (tabId < 0 || !tabData[tabId]) return;
+    if (!tabData[tabId].fingerprintingCalls.includes(message.evento)) {
+      tabData[tabId].fingerprintingCalls.push(message.evento);
+      tabData[tabId].privacyScore = calcularScore(tabData[tabId]);
+    }
+  }
+
+  if (message.action === "storageColetado") {
+    if (tabId < 0 || !tabData[tabId]) return;
+    tabData[tabId].storageItems = message.items.map(
+      (i) => `${i.tipo} | ${i.chave} | ${i.tamanho} bytes`
+    );
+    tabData[tabId].privacyScore = calcularScore(tabData[tabId]);
+  }
+
+  if (message.action === "getData") {
+    if (!tabData[message.tabId]) initTab(message.tabId);
+    sendResponse(tabData[message.tabId]);
+  }
+
+  return true;
+});
+
 // Limpa dados quando uma nova pagina carrega
 browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "loading") {
@@ -136,13 +164,4 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
 // Limpa dados quando a aba e fechada
 browser.tabs.onRemoved.addListener((tabId) => {
   delete tabData[tabId];
-});
-
-// Responde ao popup com os dados da aba ativa
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === "getData") {
-    const tabId = message.tabId;
-    if (!tabData[tabId]) initTab(tabId);
-    sendResponse(tabData[tabId]);
-  }
 });
