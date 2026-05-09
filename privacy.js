@@ -47,6 +47,27 @@ function calcularScore(data) {
   return Math.max(0, score);
 }
 
+function parsearCookie(cookieStr) {
+  // Divide a string do cookie em partes separadas por ";"
+  const partes = cookieStr.split(";").map(p => p.trim());
+
+  // A primeira parte e sempre "nome=valor"
+  const primeiraparte = partes[0];
+  const igualIdx = primeirapart.indexOf("=");
+  const nome = igualIdx >= 0 ? primeirapart.substring(0, igualIdx).trim() : primeirapart.trim();
+
+  // Verifica se e cookie de sessao (sem max-age nem expires)
+  const temExpires = partes.some(p => p.toLowerCase().startsWith("expires="));
+  const temMaxAge  = partes.some(p => p.toLowerCase().startsWith("max-age="));
+  const isSessao   = !temExpires && !temMaxAge;
+
+  return {
+    nome,
+    isSessao,
+    tipo: isSessao ? "sessao" : "persistente"
+  };
+}
+
 // Detecta dominios de terceira parte
 browser.webRequest.onBeforeRequest.addListener(
   (details) => {
@@ -55,7 +76,7 @@ browser.webRequest.onBeforeRequest.addListener(
     if (!tabData[tabId]) initTab(tabId);
 
     const requestDomain = getRootDomain(url);
-    const originDomain = getRootDomain(originUrl);
+    const originDomain  = getRootDomain(originUrl);
 
     if (requestDomain && originDomain && requestDomain !== originDomain) {
       const already = tabData[tabId].thirdPartyDomains.find(
@@ -81,19 +102,11 @@ browser.webRequest.onHeadersReceived.addListener(
 
     responseHeaders.forEach((header) => {
       if (header.name.toLowerCase() === "set-cookie") {
-        const cookieStr = header.value;
-        const nameMatch = cookieStr.match(/^([^=]+)=/);
-        const name = nameMatch ? nameMatch[1].trim() : "desconhecido";
-        const isSession = !/max-age|expires/i.test(cookieStr);
-        const cookieDomain = getRootDomain(url);
-        const isThirdParty = cookieDomain && pageDomain && cookieDomain !== pageDomain;
+        const { nome, tipo } = parsearCookie(header.value);
+        const cookieDomain   = getRootDomain(url);
+        const isThirdParty   = cookieDomain && pageDomain && cookieDomain !== pageDomain;
 
-        const cookieObj = {
-          name,
-          domain: cookieDomain,
-          session: isSession,
-          type: isSession ? "sessao" : "persistente"
-        };
+        const cookieObj = { name: nome, domain: cookieDomain, type: tipo };
 
         if (isThirdParty) {
           tabData[tabId].cookies.thirdParty.push(cookieObj);
@@ -115,7 +128,7 @@ browser.webRequest.onBeforeRedirect.addListener(
     const { tabId, url, redirectUrl } = details;
     if (tabId < 0 || !tabData[tabId]) return;
 
-    const originDomain = getRootDomain(url);
+    const originDomain   = getRootDomain(url);
     const redirectDomain = getRootDomain(redirectUrl);
 
     if (originDomain && redirectDomain && originDomain !== redirectDomain) {
