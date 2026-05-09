@@ -43,8 +43,18 @@ browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     renderList("hijacking-list", data.hijackingThreats || [], "Nenhuma ameaca detectada");
 
     const cookieItems = [
-      ...(data.cookies?.firstParty || []).map(c => `${c.name} <span class="tag">1a parte</span>`),
-      ...(data.cookies?.thirdParty || []).map(c => `${c.name} <span class="tag">3a parte</span>`)
+      ...(data.cookies?.firstParty || []).map(c => {
+        let tags = `<span class="tag">1a parte</span> <span class="tag">${c.type}</span>`;
+        if (c.httpOnly) tags += ` <span class="tag">HttpOnly</span>`;
+        if (c.secure)   tags += ` <span class="tag">Secure</span>`;
+        return `${c.name} ${tags}`;
+      }),
+      ...(data.cookies?.thirdParty || []).map(c => {
+        let tags = `<span class="tag">3a parte</span> <span class="tag">${c.type}</span>`;
+        if (c.httpOnly) tags += ` <span class="tag">HttpOnly</span>`;
+        if (c.secure)   tags += ` <span class="tag">Secure</span>`;
+        return `${c.name} ${tags}`;
+      })
     ];
     renderList("cookies-list", cookieItems, "Nenhum cookie detectado");
 

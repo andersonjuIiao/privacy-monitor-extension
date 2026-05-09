@@ -52,13 +52,18 @@ function parsearCookie(cookieStr) {
   const primeiraParte = partes[0];
   const igualIdx = primeiraParte.indexOf("=");
   const nome = igualIdx >= 0 ? primeiraParte.substring(0, igualIdx).trim() : primeiraParte.trim();
+
   const temExpires = partes.some(p => p.toLowerCase().startsWith("expires="));
   const temMaxAge  = partes.some(p => p.toLowerCase().startsWith("max-age="));
+  const httpOnly   = partes.some(p => p.toLowerCase() === "httponly");
+  const secure     = partes.some(p => p.toLowerCase() === "secure");
   const isSessao   = !temExpires && !temMaxAge;
 
   return {
     nome,
-    tipo: isSessao ? "sessao" : "persistente"
+    tipo: isSessao ? "sessao" : "persistente",
+    httpOnly,
+    secure
   };
 }
 
@@ -96,11 +101,17 @@ browser.webRequest.onHeadersReceived.addListener(
 
     responseHeaders.forEach((header) => {
       if (header.name.toLowerCase() === "set-cookie") {
-        const { nome, tipo } = parsearCookie(header.value);
-        const cookieDomain   = getRootDomain(url);
-        const isThirdParty   = cookieDomain && pageDomain && cookieDomain !== pageDomain;
+        const { nome, tipo, httpOnly, secure } = parsearCookie(header.value);
+        const cookieDomain = getRootDomain(url);
+        const isThirdParty = cookieDomain && pageDomain && cookieDomain !== pageDomain;
 
-        const cookieObj = { name: nome, domain: cookieDomain, type: tipo };
+        const cookieObj = {
+          name: nome,
+          domain: cookieDomain,
+          type: tipo,
+          httpOnly,
+          secure
+        };
 
         if (isThirdParty) {
           tabData[tabId].cookies.thirdParty.push(cookieObj);
