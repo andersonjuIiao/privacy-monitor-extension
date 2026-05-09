@@ -65,6 +65,8 @@ browser.webRequest.onBeforeRequest.addListener(
         tabData[tabId].thirdPartyDomains.push({ domain: requestDomain, type, url });
       }
     }
+
+    tabData[tabId].privacyScore = calcularScore(tabData[tabId]);
   },
   { urls: ["<all_urls>"] }
 );
@@ -126,32 +128,36 @@ browser.webRequest.onBeforeRedirect.addListener(
   { urls: ["<all_urls>"] }
 );
 
-// Recebe mensagens do content script
-browser.runtime.onMessage.addListener((message, sender) => {
+// Recebe mensagens do content script e do popup
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const tabId = sender.tab ? sender.tab.id : -1;
 
   if (message.action === "fingerprintDetectado") {
-    if (tabId < 0 || !tabData[tabId]) return;
-    if (!tabData[tabId].fingerprintingCalls.includes(message.evento)) {
-      tabData[tabId].fingerprintingCalls.push(message.evento);
-      tabData[tabId].privacyScore = calcularScore(tabData[tabId]);
+    if (tabId >= 0 && tabData[tabId]) {
+      if (!tabData[tabId].fingerprintingCalls.includes(message.evento)) {
+        tabData[tabId].fingerprintingCalls.push(message.evento);
+        tabData[tabId].privacyScore = calcularScore(tabData[tabId]);
+      }
     }
+    return false;
   }
 
   if (message.action === "storageColetado") {
-    if (tabId < 0 || !tabData[tabId]) return;
-    tabData[tabId].storageItems = message.items.map(
-      (i) => `${i.tipo} | ${i.chave} | ${i.tamanho} bytes`
-    );
-    tabData[tabId].privacyScore = calcularScore(tabData[tabId]);
+    if (tabId >= 0 && tabData[tabId]) {
+      tabData[tabId].storageItems = message.items.map(
+        (i) => `${i.tipo} | ${i.chave} | ${i.tamanho} bytes`
+      );
+      tabData[tabId].privacyScore = calcularScore(tabData[tabId]);
+    }
+    return false;
   }
 
   if (message.action === "getData") {
-    if (!tabData[message.tabId]) initTab(message.tabId);
-    sendResponse(tabData[message.tabId]);
+    const id = message.tabId;
+    if (!tabData[id]) initTab(id);
+    sendResponse(tabData[id]);
+    return true;
   }
-
-  return true;
 });
 
 // Limpa dados quando uma nova pagina carrega
