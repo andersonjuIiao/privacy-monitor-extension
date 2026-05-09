@@ -1,6 +1,5 @@
 // privacy.js - Background Script
 
-// Armazena dados por aba
 const tabData = {};
 
 function initTab(tabId) {
@@ -8,11 +7,12 @@ function initTab(tabId) {
     thirdPartyDomains: [],
     hijackingThreats: [],
     fingerprintingCalls: [],
-    cookies: { firstParty: [], thirdParty: [] }
+    cookies: { firstParty: [], thirdParty: [] },
+    storageItems: [],
+    privacyScore: 100
   };
 }
 
-// Extrai o domínio raiz de uma URL
 function getRootDomain(url) {
   try {
     const hostname = new URL(url).hostname;
@@ -23,11 +23,34 @@ function getRootDomain(url) {
   }
 }
 
-// Detecta domínios de terceira parte
+function calcularScore(data) {
+  let score = 100;
+
+  const tp = data.thirdPartyDomains.length;
+  if (tp >= 10) score -= 30;
+  else if (tp >= 5) score -= 20;
+  else if (tp >= 1) score -= 10;
+
+  const cookiesTotal = data.cookies.firstParty.length + data.cookies.thirdParty.length;
+  if (cookiesTotal >= 10) score -= 20;
+  else if (cookiesTotal >= 5) score -= 10;
+  else if (cookiesTotal >= 1) score -= 5;
+
+  const cookiesTp = data.cookies.thirdParty.length;
+  if (cookiesTp >= 5) score -= 20;
+  else if (cookiesTp >= 1) score -= 10;
+
+  if (data.fingerprintingCalls.length >= 1) score -= 20;
+
+  if (data.hijackingThreats.length >= 1) score -= 20;
+
+  return Math.max(0, score);
+}
+
+// Detecta dominios de terceira parte
 browser.webRequest.onBeforeRequest.addListener(
   (details) => {
     const { tabId, url, type, originUrl } = details;
-
     if (tabId < 0 || !originUrl) return;
     if (!tabData[tabId]) initTab(tabId);
 
@@ -39,25 +62,78 @@ browser.webRequest.onBeforeRequest.addListener(
         (d) => d.domain === requestDomain && d.type === type
       );
       if (!already) {
-        tabData[tabId].thirdPartyDomains.push({
-          domain: requestDomain,
-          type: type,
-          url: url
-        });
+        tabData[tabId].thirdPartyDomains.push({ domain: requestDomain, type, url });
       }
     }
   },
   { urls: ["<all_urls>"] }
 );
 
-// Limpa dados quando uma nova página carrega
+// Detecta cookies ao receber headers de resposta
+browser.webRequest.onHeadersReceived.addListener(
+  (details) => {
+    const { tabId, url, responseHeaders } = details;
+    if (tabId < 0 || !tabData[tabId]) return;
+
+    const pageDomain = getRootDomain(url);
+
+    responseHeaders.forEach((header) => {
+      if (header.name.toLowerCase() === "set-cookie") {
+        const cookieStr = header.value;
+        const nameMatch = cookieStr.match(/^([^=]+)=/);
+        const name = nameMatch ? nameMatch[1].trim() : "desconhecido";
+        const isSession = !/max-age|expires/i.test(cookieStr);
+        const cookieDomain = getRootDomain(url);
+        const isThirdParty = cookieDomain && pageDomain && cookieDomain !== pageDomain;
+
+        const cookieObj = {
+          name,
+          domain: cookieDomain,
+          session: isSession,
+          type: isSession ? "sessao" : "persistente"
+        };
+
+        if (isThirdParty) {
+          tabData[tabId].cookies.thirdParty.push(cookieObj);
+        } else {
+          tabData[tabId].cookies.firstParty.push(cookieObj);
+        }
+      }
+    });
+
+    tabData[tabId].privacyScore = calcularScore(tabData[tabId]);
+  },
+  { urls: ["<all_urls>"] },
+  ["responseHeaders"]
+);
+
+// Detecta redirecionamentos suspeitos (hijacking)
+browser.webRequest.onBeforeRedirect.addListener(
+  (details) => {
+    const { tabId, url, redirectUrl } = details;
+    if (tabId < 0 || !tabData[tabId]) return;
+
+    const originDomain = getRootDomain(url);
+    const redirectDomain = getRootDomain(redirectUrl);
+
+    if (originDomain && redirectDomain && originDomain !== redirectDomain) {
+      tabData[tabId].hijackingThreats.push(
+        `Redirecionamento de ${originDomain} para ${redirectDomain}`
+      );
+      tabData[tabId].privacyScore = calcularScore(tabData[tabId]);
+    }
+  },
+  { urls: ["<all_urls>"] }
+);
+
+// Limpa dados quando uma nova pagina carrega
 browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "loading") {
     initTab(tabId);
   }
 });
 
-// Limpa dados quando a aba é fechada
+// Limpa dados quando a aba e fechada
 browser.tabs.onRemoved.addListener((tabId) => {
   delete tabData[tabId];
 });
@@ -66,6 +142,7 @@ browser.tabs.onRemoved.addListener((tabId) => {
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "getData") {
     const tabId = message.tabId;
-    sendResponse(tabData[tabId] || initTab(tabId) || tabData[tabId]);
+    if (!tabData[tabId]) initTab(tabId);
+    sendResponse(tabData[tabId]);
   }
 });
