@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Monitoramento de Privacidade</title>
+  <style>
+    body {
+      width: 380px;
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      background: #1a1a2e;
+      color: #eee;
+      margin: 0;
+      padding: 10px;
+    }
+    h1 {
+      font-size: 16px;
+      color: #00d4ff;
+      margin-bottom: 4px;
+    }
+    h2 {
+      font-size: 13px;
+      color: #00d4ff;
+      border-bottom: 1px solid #333;
+      padding-bottom: 4px;
+      margin-top: 14px;
+    }
+    .score-box {
+      text-align: center;
+      padding: 10px;
+      border-radius: 8px;
+      margin: 10px 0;
+      font-size: 20px;
+      font-weight: bold;
+    }
+    .good   { background: #1a472a; color: #69ff85; }
+    .medium { background: #4a3800; color: #ffd700; }
+    .bad    { background: #4a0000; color: #ff6b6b; }
+    ul { padding-left: 16px; margin: 4px 0; }
+    li { margin: 3px 0; }
+    .tag {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      background: #333;
+      color: #aaa;
+      margin-left: 4px;
+    }
+    #loading { color: #aaa; text-align: center; padding: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Monitoramento de Privacidade</h1>
+  <div id="loading">Carregando...</div>
+  <div id="content" style="display:none">
+
+    <div id="score-box" class="score-box"></div>
+
+    <h2>Dominios de Terceira Parte</h2>
+    <ul id="third-party-list"></ul>
+
+    <h2>Ameacas de Hijacking</h2>
+    <ul id="hijacking-list"></ul>
+
+    <h2>Cookies</h2>
+    <ul id="cookies-list"></ul>
+
+    <h2>Web Storage</h2>
+    <ul id="storage-list"></ul>
+
+    <h2>Fingerprinting</h2>
+    <ul id="fingerprinting-list"></ul>
+
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
