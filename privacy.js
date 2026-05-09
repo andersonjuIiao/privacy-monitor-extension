@@ -48,22 +48,16 @@ function calcularScore(data) {
 }
 
 function parsearCookie(cookieStr) {
-  // Divide a string do cookie em partes separadas por ";"
   const partes = cookieStr.split(";").map(p => p.trim());
-
-  // A primeira parte e sempre "nome=valor"
-  const primeiraparte = partes[0];
-  const igualIdx = primeirapart.indexOf("=");
-  const nome = igualIdx >= 0 ? primeirapart.substring(0, igualIdx).trim() : primeirapart.trim();
-
-  // Verifica se e cookie de sessao (sem max-age nem expires)
+  const primeiraParte = partes[0];
+  const igualIdx = primeiraParte.indexOf("=");
+  const nome = igualIdx >= 0 ? primeiraParte.substring(0, igualIdx).trim() : primeiraParte.trim();
   const temExpires = partes.some(p => p.toLowerCase().startsWith("expires="));
   const temMaxAge  = partes.some(p => p.toLowerCase().startsWith("max-age="));
   const isSessao   = !temExpires && !temMaxAge;
 
   return {
     nome,
-    isSessao,
     tipo: isSessao ? "sessao" : "persistente"
   };
 }
