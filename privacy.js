@@ -62,19 +62,15 @@ function getBaseDomain(hostname) {
 }
 
 /* ---------- webNavigation: reset por navegacao ---------- */
-browser.webNavigation.onBeforeNavigate.addListener((details) => {
+browser.webNavigation.onDOMContentLoaded.addListener((details) => {
   if (details.frameId !== 0) return;
+  const current = tabData.get(details.tabId);
+  const newDomain = getBaseDomain(getHostname(details.url));
+  if (current && current.mainDomain === newDomain) return;
   const fresh = newTabRecord();
   fresh.url = details.url;
-  fresh.mainDomain = getBaseDomain(getHostname(details.url));
+  fresh.mainDomain = newDomain;
   tabData.set(details.tabId, fresh);
-});
-
-browser.webNavigation.onCommitted.addListener((details) => {
-  if (details.frameId !== 0) return;
-  const data = getTabData(details.tabId);
-  data.url = details.url;
-  data.mainDomain = getBaseDomain(getHostname(details.url));
 });
 
 /* ---------- webRequest: dominios de terceira parte ---------- */
@@ -130,10 +126,10 @@ browser.webRequest.onHeadersReceived.addListener(
           ? primeiraParte.substring(0, igualIdx).trim()
           : primeiraParte.trim();
 
-        const temExpires = partes.some((p) => p.toLowerCase().startsWith("expires="));
-        const temMaxAge  = partes.some((p) => p.toLowerCase().startsWith("max-age="));
-        const httpOnly   = partes.some((p) => p.toLowerCase() === "httponly");
-        const secure     = partes.some((p) => p.toLowerCase() === "secure");
+        const temExpires  = partes.some((p) => p.toLowerCase().startsWith("expires="));
+        const temMaxAge   = partes.some((p) => p.toLowerCase().startsWith("max-age="));
+        const httpOnly    = partes.some((p) => p.toLowerCase() === "httponly");
+        const secure      = partes.some((p) => p.toLowerCase() === "secure");
         const isPersistent = temExpires || temMaxAge;
 
         const cookieObj = {
