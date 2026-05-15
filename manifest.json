@@ -2,44 +2,48 @@
   "manifest_version": 2,
   "name": "Monitoramento de Privacidade",
   "version": "1.0.0",
-  "description": "Detecta ameacas a privacidade e rastreamento na navegacao web.",
+  "description": "Detector de ameacas a privacidade e rastreamento web (Roteiro 3 - Tecnologias Hacker / Insper).",
 
   "permissions": [
+    "<all_urls>",
     "webRequest",
     "webRequestBlocking",
     "cookies",
     "storage",
     "tabs",
     "activeTab",
-    "<all_urls>"
+    "webNavigation"
   ],
 
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content_script.js"],
-      "run_at": "document_idle"
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "privacy-monitor@insper.edu.br",
+      "strict_min_version": "115.0",
+      "data_collection_permissions": {
+        "required": [],
+        "optional": []
+      }
     }
-  ],
+  },
 
   "background": {
     "scripts": ["privacy.js"],
     "persistent": true
   },
 
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content_script.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+
+  "web_accessible_resources": ["injected.js"],
+
   "browser_action": {
     "default_popup": "popup.html",
     "default_title": "Monitoramento de Privacidade"
-  },
-
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "privacy-monitor@insper.edu.br",
-      "strict_min_version": "91.0",
-      "data_collection_permissions": {
-        "required": [],
-        "optional": []
-      }
-    }
   }
 }
