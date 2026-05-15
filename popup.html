@@ -4,75 +4,215 @@
   <meta charset="UTF-8">
   <title>Monitoramento de Privacidade</title>
   <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      width: 380px;
+      width: 420px;
+      min-height: 500px;
       font-family: Arial, sans-serif;
       font-size: 13px;
-      background: #1a1a2e;
-      color: #eee;
-      margin: 0;
-      padding: 10px;
+      background: #0f0f1a;
+      color: #ddd;
     }
-    h1 {
-      font-size: 16px;
+
+    /* Header */
+    #header {
+      background: #16162a;
+      padding: 12px 14px 8px;
+      border-bottom: 1px solid #2a2a45;
+    }
+
+    #header h1 {
+      font-size: 15px;
       color: #00d4ff;
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
-    h2 {
-      font-size: 13px;
-      color: #00d4ff;
-      border-bottom: 1px solid #333;
-      padding-bottom: 4px;
-      margin-top: 14px;
+
+    #domain {
+      font-size: 11px;
+      color: #888;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 390px;
     }
-    .score-box {
-      text-align: center;
-      padding: 10px;
+
+    /* Score */
+    #score-box {
+      margin: 10px 14px;
+      padding: 10px 14px;
       border-radius: 8px;
-      margin: 10px 0;
-      font-size: 20px;
+      font-size: 15px;
       font-weight: bold;
+      text-align: center;
     }
     .good   { background: #1a472a; color: #69ff85; }
     .medium { background: #4a3800; color: #ffd700; }
-    .bad    { background: #4a0000; color: #ff6b6b; }
-    ul { padding-left: 16px; margin: 4px 0; }
-    li { margin: 3px 0; }
+    .bad    { background: #4a1500; color: #ff8c42; }
+    .critic { background: #4a0000; color: #ff6b6b; }
+
+    /* Tabs */
+    #tabs {
+      display: flex;
+      background: #16162a;
+      border-bottom: 1px solid #2a2a45;
+      overflow-x: auto;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 8px 4px;
+      font-size: 11px;
+      text-align: center;
+      cursor: pointer;
+      color: #888;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      outline: none;
+    }
+
+    .tab:hover { color: #ccc; }
+    .tab.active { color: #00d4ff; border-bottom-color: #00d4ff; }
+
+    .badge {
+      display: inline-block;
+      background: #2a2a45;
+      color: #aaa;
+      font-size: 10px;
+      border-radius: 8px;
+      padding: 0 5px;
+      margin-left: 3px;
+    }
+
+    .tab.active .badge { background: #003344; color: #00d4ff; }
+
+    /* Panels */
+    #panels { padding: 10px 14px; }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* Rows */
+    .row {
+      padding: 7px 0;
+      border-bottom: 1px solid #1e1e35;
+    }
+
+    .row:last-child { border-bottom: none; }
+
+    .row-domain {
+      font-size: 12px;
+      color: #ccc;
+      word-break: break-all;
+    }
+
+    .row-meta {
+      font-size: 11px;
+      color: #666;
+      margin-top: 3px;
+    }
+
     .tag {
       display: inline-block;
       padding: 1px 6px;
       border-radius: 4px;
-      font-size: 11px;
-      background: #333;
+      font-size: 10px;
+      background: #2a2a45;
       color: #aaa;
-      margin-left: 4px;
+      margin-right: 3px;
     }
-    #loading { color: #aaa; text-align: center; padding: 20px; }
+
+    .tag.warn { background: #4a1500; color: #ff8c42; }
+    .tag.ok   { background: #1a3a1a; color: #69ff85; }
+    .tag.info { background: #003344; color: #00d4ff; }
+
+    .empty {
+      color: #555;
+      font-style: italic;
+      padding: 14px 0;
+      text-align: center;
+    }
+
+    /* Section titles inside panels */
+    .section-title {
+      font-size: 11px;
+      color: #00d4ff;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 12px 0 6px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #2a2a45;
+    }
+
+    .section-title:first-child { margin-top: 0; }
+
+    /* Stats row */
+    .stats-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+
+    .stat-box {
+      flex: 1;
+      min-width: 70px;
+      background: #16162a;
+      border: 1px solid #2a2a45;
+      border-radius: 6px;
+      padding: 6px 8px;
+      text-align: center;
+    }
+
+    .stat-box .stat-num {
+      font-size: 18px;
+      font-weight: bold;
+      color: #00d4ff;
+    }
+
+    .stat-box .stat-label {
+      font-size: 10px;
+      color: #666;
+      margin-top: 2px;
+    }
+
+    #refresh-btn {
+      display: block;
+      width: 100%;
+      margin-top: 12px;
+      padding: 7px;
+      background: #16162a;
+      border: 1px solid #2a2a45;
+      border-radius: 6px;
+      color: #888;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    #refresh-btn:hover { border-color: #00d4ff; color: #00d4ff; }
   </style>
 </head>
 <body>
-  <h1>Monitoramento de Privacidade</h1>
-  <div id="loading">Carregando...</div>
-  <div id="content" style="display:none">
 
-    <div id="score-box" class="score-box"></div>
-
-    <h2>Dominios de Terceira Parte</h2>
-    <ul id="third-party-list"></ul>
-
-    <h2>Ameacas de Hijacking</h2>
-    <ul id="hijacking-list"></ul>
-
-    <h2>Cookies</h2>
-    <ul id="cookies-list"></ul>
-
-    <h2>Web Storage</h2>
-    <ul id="storage-list"></ul>
-
-    <h2>Fingerprinting</h2>
-    <ul id="fingerprinting-list"></ul>
-
+  <div id="header">
+    <h1>Monitoramento de Privacidade</h1>
+    <div id="domain">Carregando...</div>
   </div>
-  <script src="popup.js"></script>
-</body>
-</html>
+
+  <div id="score-box">Calculando...</div>
+
+  <div id="tabs">
+    <button class="tab active" data-tab="domains">
+      Dominios <span class="badge" id="badge-domains">0</span>
+    </button>
+    <button class="tab" data-tab="cookies">
+      Cookies <span class="badge" id="badge-cookies">0</span>
+    </button>
+    <button class="tab" data-tab="storage">
+      Storage <span class="badge" id="badge-storage">0</span>
+    </button>
+    <button
