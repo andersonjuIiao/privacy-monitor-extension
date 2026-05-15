@@ -15,7 +15,6 @@
       color: #ddd;
     }
 
-    /* Header */
     #header {
       background: #16162a;
       padding: 12px 14px 8px;
@@ -37,7 +36,6 @@
       max-width: 390px;
     }
 
-    /* Score */
     #score-box {
       margin: 10px 14px;
       padding: 10px 14px;
@@ -51,7 +49,6 @@
     .bad    { background: #4a1500; color: #ff8c42; }
     .critic { background: #4a0000; color: #ff6b6b; }
 
-    /* Tabs */
     #tabs {
       display: flex;
       background: #16162a;
@@ -90,13 +87,11 @@
 
     .tab.active .badge { background: #003344; color: #00d4ff; }
 
-    /* Panels */
     #panels { padding: 10px 14px; }
 
     .panel { display: none; }
     .panel.active { display: block; }
 
-    /* Rows */
     .row {
       padding: 7px 0;
       border-bottom: 1px solid #1e1e35;
@@ -126,9 +121,10 @@
       margin-right: 3px;
     }
 
-    .tag.warn { background: #4a1500; color: #ff8c42; }
-    .tag.ok   { background: #1a3a1a; color: #69ff85; }
-    .tag.info { background: #003344; color: #00d4ff; }
+    .tag.warn  { background: #4a1500; color: #ff8c42; }
+    .tag.ok    { background: #1a3a1a; color: #69ff85; }
+    .tag.info  { background: #003344; color: #00d4ff; }
+    .tag.super { background: #3a0050; color: #cc88ff; }
 
     .empty {
       color: #555;
@@ -137,20 +133,25 @@
       text-align: center;
     }
 
-    /* Section titles inside panels */
     .section-title {
       font-size: 11px;
       color: #00d4ff;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin: 12px 0 6px;
+      margin: 12px 0 4px;
       padding-bottom: 4px;
       border-bottom: 1px solid #2a2a45;
     }
 
     .section-title:first-child { margin-top: 0; }
 
-    /* Stats row */
+    .section-desc {
+      font-size: 10px;
+      color: #555;
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+
     .stats-row {
       display: flex;
       gap: 8px;
@@ -179,6 +180,12 @@
       color: #666;
       margin-top: 2px;
     }
+
+    .stat-box.warn-box { border-color: #4a1500; }
+    .stat-box.warn-box .stat-num { color: #ff8c42; }
+
+    .stat-box.super-box { border-color: #3a0050; }
+    .stat-box.super-box .stat-num { color: #cc88ff; }
 
     #refresh-btn {
       display: block;
@@ -215,4 +222,142 @@
     <button class="tab" data-tab="storage">
       Storage <span class="badge" id="badge-storage">0</span>
     </button>
-    <button
+    <button class="tab" data-tab="fingerprint">
+      Fingerprint <span class="badge" id="badge-fp">0</span>
+    </button>
+    <button class="tab" data-tab="hijack">
+      Hijack <span class="badge" id="badge-hijack">0</span>
+    </button>
+  </div>
+
+  <div id="panels">
+
+    <!-- Dominios -->
+    <div class="panel active" data-panel="domains">
+      <div class="section-title">Dominios de Terceira Parte</div>
+      <div class="section-desc">Servidores externos contactados durante o carregamento da pagina, classificados por tipo de recurso e numero de requisicoes.</div>
+      <div id="domains-list"><div class="empty">Carregando...</div></div>
+    </div>
+
+    <!-- Cookies -->
+    <div class="panel" data-panel="cookies">
+
+      <div class="section-title">Resumo</div>
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-num" id="c-first">0</div>
+          <div class="stat-label">1a parte</div>
+        </div>
+        <div class="stat-box warn-box">
+          <div class="stat-num" id="c-third">0</div>
+          <div class="stat-label">3a parte</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num" id="c-session">0</div>
+          <div class="stat-label">Sessao</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num" id="c-persist">0</div>
+          <div class="stat-label">Persistente</div>
+        </div>
+        <div class="stat-box super-box">
+          <div class="stat-num" id="c-super">0</div>
+          <div class="stat-label">Supercookie</div>
+        </div>
+      </div>
+
+      <div class="section-title">Cookies Convencionais (Set-Cookie)</div>
+      <div class="section-desc">Cookies injetados via header HTTP Set-Cookie. Podem ser de primeira parte (mesmo dominio) ou terceira parte (dominio externo).</div>
+      <div id="cookies-list"><div class="empty">Nenhum cookie convencional detectado.</div></div>
+
+      <div class="section-title">Supercookies (HSTS / ETag)</div>
+      <div class="section-desc">Mecanismos alternativos de rastreamento persistente. HSTS grava instrucoes no navegador que sobrevivem a limpeza de cookies. ETags de terceiros permitem reidentificacao via cache.</div>
+      <div id="super-list"><div class="empty">Nenhum supercookie identificado.</div></div>
+
+    </div>
+
+    <!-- Storage -->
+    <div class="panel" data-panel="storage">
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-num" id="ls-count">0</div>
+          <div class="stat-label">localStorage</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num" id="ss-count">0</div>
+          <div class="stat-label">sessionStorage</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num" id="idb-count">0</div>
+          <div class="stat-label">IndexedDB</div>
+        </div>
+      </div>
+      <div class="section-title">localStorage</div>
+      <div class="section-desc">Dados persistentes armazenados no dispositivo pelo site. Sobrevivem ao fechamento do navegador.</div>
+      <div id="ls-list"><div class="empty">(vazio)</div></div>
+
+      <div class="section-title">sessionStorage</div>
+      <div class="section-desc">Dados temporarios armazenados apenas durante a sessao atual. Apagados ao fechar a aba.</div>
+      <div id="ss-list"><div class="empty">(vazio)</div></div>
+
+      <div class="section-title">IndexedDB</div>
+      <div class="section-desc">Bancos de dados estruturados de alto volume armazenados no dispositivo.</div>
+      <div id="idb-list"><div class="empty">(nenhum banco)</div></div>
+    </div>
+
+    <!-- Fingerprinting -->
+    <div class="panel" data-panel="fingerprint">
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-num" id="fp-canvas">0</div>
+          <div class="stat-label">Canvas</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num" id="fp-webgl">0</div>
+          <div class="stat-label">WebGL</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num" id="fp-audio">0</div>
+          <div class="stat-label">Audio</div>
+        </div>
+      </div>
+      <div class="section-title">Chamadas de Fingerprinting Detectadas</div>
+      <div class="section-desc">Chamadas a APIs que podem ser usadas para identificar unicamente o navegador sem uso de cookies. Interceptadas via hooks no contexto da pagina.</div>
+      <div id="fp-list"><div class="empty">Nenhuma chamada detectada.</div></div>
+    </div>
+
+    <!-- Hijacking -->
+    <div class="panel" data-panel="hijack">
+
+      <div class="section-title">
+        Scripts Suspeitos
+        <span class="badge" id="badge-scripts">0</span>
+      </div>
+      <div class="section-desc">Scripts externos com nomes associados a ferramentas de hijacking, miners ou stealers.</div>
+      <div id="hijack-scripts"><div class="empty">Nenhum script suspeito.</div></div>
+
+      <div class="section-title">
+        Redirecionamentos Cross-Domain
+        <span class="badge" id="badge-redirs">0</span>
+      </div>
+      <div class="section-desc">Redirecionamentos entre dominios diferentes. Podem indicar cookie syncing entre redes de publicidade.</div>
+      <div id="hijack-redirs"><div class="empty">Sem redirects cross-domain.</div></div>
+
+      <div class="section-title">
+        Cookie Syncing
+        <span class="badge" id="badge-sync">0</span>
+      </div>
+      <div class="section-desc">Requisicoes de terceiros contendo parametros de sincronismo de identificadores entre dominios (uid, sync, partner_id, etc).</div>
+      <div id="sync-list"><div class="empty">Sem indicios de cookie syncing.</div></div>
+
+    </div>
+
+  </div>
+
+  <div style="padding: 0 14px 12px;">
+    <button id="refresh-btn">Atualizar dados</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
