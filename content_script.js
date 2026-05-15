@@ -1,129 +1,120 @@
 // content_script.js
 
-function coletarWebStorage() {
-  const items = [];
+(function () {
+  "use strict";
 
+  /* ---- Injeta o hooker no contexto da pagina ---- */
   try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      const value = localStorage.getItem(key);
-      items.push({
-        tipo: "localStorage",
-        chave: key,
-        tamanho: value ? value.length : 0
-      });
+    const s = document.createElement("script");
+    s.src = browser.runtime.getURL("injected.js");
+    s.async = false;
+    s.onload = function () { this.remove(); };
+    (document.head || document.documentElement).appendChild(s);
+  } catch (e) {
+    console.warn("[PrivacyMonitor] falha ao injetar:", e);
+  }
+
+  /* ---- Recebe eventos de fingerprinting do contexto da pagina ---- */
+  window.addEventListener("message", (ev) => {
+    if (ev.source !== window) return;
+    const d = ev.data;
+    if (!d || d.__privacyMonitor !== true) return;
+    if (d.type === "FINGERPRINT") {
+      browser.runtime.sendMessage({
+        type: "FINGERPRINT",
+        api: d.api,
+        method: d.method,
+        stack: d.stack
+      }).catch(() => {});
     }
-  } catch (e) {}
+  });
 
-  try {
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const key = sessionStorage.key(i);
-      const value = sessionStorage.getItem(key);
-      items.push({
-        tipo: "sessionStorage",
-        chave: key,
-        tamanho: value ? value.length : 0
-      });
-    }
-  } catch (e) {}
-
-  return items;
-}
-
-function injetarDetectoresFingerprinting() {
-  const script = document.createElement("script");
-  script.textContent = `
-    (function() {
-      function notificar(evento) {
-        window.postMessage({ tipo: "fingerprint", evento: evento }, "*");
+  /* ---- Coleta Web Storage ---- */
+  function collectStorage(storage) {
+    const items = {};
+    let totalBytes = 0;
+    try {
+      for (let i = 0; i < storage.length; i++) {
+        const k = storage.key(i);
+        const v = storage.getItem(k) || "";
+        items[k] = v.length;
+        totalBytes += k.length + v.length;
       }
+    } catch (e) {}
+    return { items, totalBytes, count: Object.keys(items).length };
+  }
 
-      try {
-        const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
-        HTMLCanvasElement.prototype.toDataURL = function() {
-          notificar("Canvas: toDataURL");
-          return origToDataURL.apply(this, arguments);
-        };
-      } catch(e) {}
+  function reportStorage() {
+    const ls = collectStorage(window.localStorage);
+    const ss = collectStorage(window.sessionStorage);
 
-      try {
-        const origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
-        CanvasRenderingContext2D.prototype.getImageData = function() {
-          notificar("Canvas: getImageData");
-          return origGetImageData.apply(this, arguments);
-        };
-      } catch(e) {}
-
-      try {
-        const origGetParameterWebGL = WebGLRenderingContext.prototype.getParameter;
-        WebGLRenderingContext.prototype.getParameter = function(param) {
-          if (param === 37445 || param === 37446) {
-            notificar("WebGL: getParameter (renderer/vendor)");
-          }
-          return origGetParameterWebGL.apply(this, arguments);
-        };
-      } catch(e) {}
-
-      try {
-        const origGetParameterWebGL2 = WebGL2RenderingContext.prototype.getParameter;
-        WebGL2RenderingContext.prototype.getParameter = function(param) {
-          if (param === 37445 || param === 37446) {
-            notificar("WebGL2: getParameter (renderer/vendor)");
-          }
-          return origGetParameterWebGL2.apply(this, arguments);
-        };
-      } catch(e) {}
-
-      try {
-        const OrigAudioContext = window.AudioContext || window.webkitAudioContext;
-        if (OrigAudioContext) {
-          const origCreateOscillator = OrigAudioContext.prototype.createOscillator;
-          OrigAudioContext.prototype.createOscillator = function() {
-            notificar("AudioContext: createOscillator");
-            return origCreateOscillator.apply(this, arguments);
-          };
-
-          const origCreateDynamics = OrigAudioContext.prototype.createDynamicsCompressor;
-          OrigAudioContext.prototype.createDynamicsCompressor = function() {
-            notificar("AudioContext: createDynamicsCompressor");
-            return origCreateDynamics.apply(this, arguments);
-          };
+    const finishWith = (idbList) => {
+      browser.runtime.sendMessage({
+        type: "STORAGE_REPORT",
+        payload: {
+          localStorage: ls,
+          sessionStorage: ss,
+          indexedDB: idbList,
+          domain: location.hostname
         }
-      } catch(e) {}
+      }).catch(() => {});
+    };
 
+    if (window.indexedDB && typeof indexedDB.databases === "function") {
+      indexedDB.databases()
+        .then((dbs) => finishWith((dbs || []).map((db) => ({
+          name: db.name,
+          version: db.version
+        }))))
+        .catch(() => finishWith([]));
+    } else {
+      finishWith([]);
+    }
+  }
+
+  /* ---- Detecta scripts externos suspeitos ---- */
+  function checkSuspiciousScripts() {
+    const here = location.hostname;
+    document.querySelectorAll("script[src]").forEach((s) => {
       try {
-        const origGetContext = HTMLCanvasElement.prototype.getContext;
-        HTMLCanvasElement.prototype.getContext = function(type) {
-          if (type === "webgl" || type === "experimental-webgl" || type === "webgl2") {
-            notificar("WebGL: getContext (" + type + ")");
-          }
-          return origGetContext.apply(this, arguments);
-        };
-      } catch(e) {}
-
-    })();
-  `;
-  document.documentElement.appendChild(script);
-  script.remove();
-}
-
-window.addEventListener("message", (event) => {
-  if (event.source !== window) return;
-  if (event.data && event.data.tipo === "fingerprint") {
-    browser.runtime.sendMessage({
-      action: "fingerprintDetectado",
-      evento: event.data.evento
+        const u = new URL(s.src, location.href);
+        if (u.protocol === "data:" || u.protocol === "javascript:") {
+          browser.runtime.sendMessage({
+            type: "SUSPICIOUS_SCRIPT",
+            payload: { src: s.src.slice(0, 200), reason: "protocolo-perigoso" }
+          }).catch(() => {});
+          return;
+        }
+        const isExternal = u.hostname && u.hostname !== here;
+        const namePattern = /(hook\.js|\/beef\/|coinhive|cryptonight|miner|webcrypt|ransom|inject\.js|stealer|keylog)/i;
+        if (isExternal && namePattern.test(u.href)) {
+          browser.runtime.sendMessage({
+            type: "SUSPICIOUS_SCRIPT",
+            payload: {
+              src: u.href.slice(0, 200),
+              reason: "nome-suspeito",
+              externalHost: u.hostname
+            }
+          }).catch(() => {});
+        }
+      } catch (e) {}
     });
   }
-});
 
-function enviarDados() {
-  const storageItems = coletarWebStorage();
-  browser.runtime.sendMessage({
-    action: "storageColetado",
-    items: storageItems
+  /* ---- Triggers de coleta ---- */
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      checkSuspiciousScripts();
+      setTimeout(reportStorage, 200);
+    });
+  } else {
+    checkSuspiciousScripts();
+    setTimeout(reportStorage, 200);
+  }
+
+  window.addEventListener("load", () => {
+    setTimeout(reportStorage, 1500);
+    setTimeout(checkSuspiciousScripts, 1500);
   });
-}
 
-injetarDetectoresFingerprinting();
-enviarDados();
+})();
