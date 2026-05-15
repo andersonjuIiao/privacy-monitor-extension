@@ -1,191 +1,315 @@
 // privacy.js - Background Script
 
-const tabData = {};
+"use strict";
 
-function initTab(tabId) {
-  tabData[tabId] = {
-    thirdPartyDomains: [],
-    hijackingThreats: [],
-    fingerprintingCalls: [],
-    cookies: { firstParty: [], thirdParty: [] },
-    storageItems: [],
+const tabData = new Map();
+
+function newTabRecord() {
+  return {
+    url: "",
+    mainDomain: "",
+    thirdPartyDomains: new Map(),
+    cookies: {
+      firstParty: [],
+      thirdParty: [],
+      session: [],
+      persistent: [],
+      superCookies: []
+    },
+    storage: {
+      localStorage: { items: {}, totalBytes: 0, count: 0 },
+      sessionStorage: { items: {}, totalBytes: 0, count: 0 },
+      indexedDB: [],
+      domain: ""
+    },
+    fingerprinting: {
+      canvas: 0, webgl: 0, audio: 0, details: []
+    },
+    hijacking: {
+      suspiciousScripts: [],
+      redirects: []
+    },
+    cookieSyncing: [],
+    requestCount: 0,
     privacyScore: 100
   };
 }
 
-function getRootDomain(url) {
-  try {
-    const hostname = new URL(url).hostname;
-    const parts = hostname.split(".");
-    return parts.slice(-2).join(".");
-  } catch {
-    return null;
+function getTabData(tabId) {
+  if (!tabData.has(tabId)) tabData.set(tabId, newTabRecord());
+  return tabData.get(tabId);
+}
+
+/* ---------- Helpers de dominio ---------- */
+function getHostname(url) {
+  try { return new URL(url).hostname; } catch (e) { return ""; }
+}
+
+const MULTI_PART_TLDS = new Set([
+  "co.uk", "com.br", "co.jp", "com.au", "co.in", "com.mx",
+  "com.ar", "co.kr", "com.sg", "co.za", "ac.uk", "gov.br", "edu.br"
+]);
+
+function getBaseDomain(hostname) {
+  if (!hostname) return "";
+  const parts = hostname.split(".");
+  if (parts.length <= 2) return hostname;
+  const last2 = parts.slice(-2).join(".");
+  if (MULTI_PART_TLDS.has(last2) && parts.length >= 3) {
+    return parts.slice(-3).join(".");
   }
+  return last2;
 }
 
-function calcularScore(data) {
-  let score = 100;
+/* ---------- webNavigation: reset por navegacao ---------- */
+browser.webNavigation.onBeforeNavigate.addListener((details) => {
+  if (details.frameId !== 0) return;
+  const fresh = newTabRecord();
+  fresh.url = details.url;
+  fresh.mainDomain = getBaseDomain(getHostname(details.url));
+  tabData.set(details.tabId, fresh);
+});
 
-  const tp = data.thirdPartyDomains.length;
-  if (tp >= 10) score -= 30;
-  else if (tp >= 5) score -= 20;
-  else if (tp >= 1) score -= 10;
+browser.webNavigation.onCommitted.addListener((details) => {
+  if (details.frameId !== 0) return;
+  const data = getTabData(details.tabId);
+  data.url = details.url;
+  data.mainDomain = getBaseDomain(getHostname(details.url));
+});
 
-  const cookiesTotal = data.cookies.firstParty.length + data.cookies.thirdParty.length;
-  if (cookiesTotal >= 10) score -= 20;
-  else if (cookiesTotal >= 5) score -= 10;
-  else if (cookiesTotal >= 1) score -= 5;
-
-  const cookiesTp = data.cookies.thirdParty.length;
-  if (cookiesTp >= 5) score -= 20;
-  else if (cookiesTp >= 1) score -= 10;
-
-  if (data.fingerprintingCalls.length >= 1) score -= 20;
-
-  if (data.hijackingThreats.length >= 1) score -= 20;
-
-  return Math.max(0, score);
-}
-
-function parsearCookie(cookieStr) {
-  const partes = cookieStr.split(";").map(p => p.trim());
-  const primeiraParte = partes[0];
-  const igualIdx = primeiraParte.indexOf("=");
-  const nome = igualIdx >= 0 ? primeiraParte.substring(0, igualIdx).trim() : primeiraParte.trim();
-
-  const temExpires = partes.some(p => p.toLowerCase().startsWith("expires="));
-  const temMaxAge  = partes.some(p => p.toLowerCase().startsWith("max-age="));
-  const httpOnly   = partes.some(p => p.toLowerCase() === "httponly");
-  const secure     = partes.some(p => p.toLowerCase() === "secure");
-  const isSessao   = !temExpires && !temMaxAge;
-
-  return {
-    nome,
-    tipo: isSessao ? "sessao" : "persistente",
-    httpOnly,
-    secure
-  };
-}
-
-// Detecta dominios de terceira parte
+/* ---------- webRequest: dominios de terceira parte ---------- */
 browser.webRequest.onBeforeRequest.addListener(
   (details) => {
-    const { tabId, url, type, originUrl } = details;
-    if (tabId < 0 || !originUrl) return;
-    if (!tabData[tabId]) initTab(tabId);
+    if (details.tabId < 0) return;
+    const data = getTabData(details.tabId);
+    data.requestCount++;
 
-    const requestDomain = getRootDomain(url);
-    const originDomain  = getRootDomain(originUrl);
+    const reqHost = getHostname(details.url);
+    const reqBase = getBaseDomain(reqHost);
+    if (!data.mainDomain || !reqBase) return;
+    if (reqBase === data.mainDomain) return;
 
-    if (requestDomain && originDomain && requestDomain !== originDomain) {
-      const already = tabData[tabId].thirdPartyDomains.find(
-        (d) => d.domain === requestDomain && d.type === type
-      );
-      if (!already) {
-        tabData[tabId].thirdPartyDomains.push({ domain: requestDomain, type, url });
-      }
+    if (!data.thirdPartyDomains.has(reqHost)) {
+      data.thirdPartyDomains.set(reqHost, {
+        baseDomain: reqBase,
+        types: new Set(),
+        count: 0,
+        urls: []
+      });
     }
-
-    tabData[tabId].privacyScore = calcularScore(tabData[tabId]);
+    const entry = data.thirdPartyDomains.get(reqHost);
+    entry.types.add(details.type || "other");
+    entry.count++;
+    if (entry.urls.length < 3) entry.urls.push(details.url);
   },
   { urls: ["<all_urls>"] }
 );
 
-// Detecta cookies ao receber headers de resposta
+/* ---------- webRequest: cookies, supercookies e cookie syncing ---------- */
 browser.webRequest.onHeadersReceived.addListener(
   (details) => {
-    const { tabId, url, responseHeaders } = details;
-    if (tabId < 0 || !tabData[tabId]) return;
+    if (details.tabId < 0) return;
+    const data = getTabData(details.tabId);
+    const reqHost = getHostname(details.url);
+    const reqBase = getBaseDomain(reqHost);
+    const isThirdParty =
+      data.mainDomain && reqBase && reqBase !== data.mainDomain;
 
-    const pageDomain = getRootDomain(url);
+    let etagValue = null;
+    let hstsValue = null;
 
-    responseHeaders.forEach((header) => {
-      if (header.name.toLowerCase() === "set-cookie") {
-        const { nome, tipo, httpOnly, secure } = parsearCookie(header.value);
-        const cookieDomain = getRootDomain(url);
-        const isThirdParty = cookieDomain && pageDomain && cookieDomain !== pageDomain;
+    for (const header of details.responseHeaders || []) {
+      const name = (header.name || "").toLowerCase();
+      const value = header.value || "";
+
+      if (name === "set-cookie") {
+        const partes = value.split(";").map((p) => p.trim());
+        const primeiraParte = partes[0];
+        const igualIdx = primeiraParte.indexOf("=");
+        const nomeCookie = igualIdx >= 0
+          ? primeiraParte.substring(0, igualIdx).trim()
+          : primeiraParte.trim();
+
+        const temExpires = partes.some((p) => p.toLowerCase().startsWith("expires="));
+        const temMaxAge  = partes.some((p) => p.toLowerCase().startsWith("max-age="));
+        const httpOnly   = partes.some((p) => p.toLowerCase() === "httponly");
+        const secure     = partes.some((p) => p.toLowerCase() === "secure");
+        const isPersistent = temExpires || temMaxAge;
 
         const cookieObj = {
-          name: nome,
-          domain: cookieDomain,
-          type: tipo,
+          name: nomeCookie,
+          domain: reqHost,
+          baseDomain: reqBase,
+          isThirdParty,
+          isPersistent,
           httpOnly,
           secure
         };
 
-        if (isThirdParty) {
-          tabData[tabId].cookies.thirdParty.push(cookieObj);
-        } else {
-          tabData[tabId].cookies.firstParty.push(cookieObj);
-        }
-      }
-    });
+        if (isThirdParty) data.cookies.thirdParty.push(cookieObj);
+        else data.cookies.firstParty.push(cookieObj);
 
-    tabData[tabId].privacyScore = calcularScore(tabData[tabId]);
+        if (isPersistent) data.cookies.persistent.push(cookieObj);
+        else data.cookies.session.push(cookieObj);
+      }
+
+      if (name === "etag") etagValue = value;
+      if (name === "strict-transport-security") hstsValue = value;
+    }
+
+    // Supercookies: ETag e HSTS de terceiros
+    if (etagValue && isThirdParty) {
+      data.cookies.superCookies.push({
+        type: "ETag",
+        domain: reqHost,
+        baseDomain: reqBase,
+        header: etagValue.slice(0, 80)
+      });
+    }
+    if (hstsValue && isThirdParty) {
+      data.cookies.superCookies.push({
+        type: "HSTS",
+        domain: reqHost,
+        baseDomain: reqBase,
+        header: hstsValue.slice(0, 80)
+      });
+    }
+
+    // Cookie syncing: parametros de sincronismo em URLs de terceiros
+    if (isThirdParty) {
+      try {
+        const u = new URL(details.url);
+        for (const [k, v] of u.searchParams) {
+          if (
+            /(^|_)(uid|user_id|tracking_id|sync|partner_id|gdpr|consent|tdid|ssp|dsp)(_|$)/i.test(k) &&
+            v && v.length >= 6
+          ) {
+            data.cookieSyncing.push({
+              domain: reqHost,
+              baseDomain: reqBase,
+              param: k,
+              valuePreview: v.slice(0, 40)
+            });
+            break;
+          }
+        }
+      } catch (e) {}
+    }
   },
   { urls: ["<all_urls>"] },
   ["responseHeaders"]
 );
 
-// Detecta redirecionamentos suspeitos
+/* ---------- webRequest: redirects suspeitos ---------- */
 browser.webRequest.onBeforeRedirect.addListener(
   (details) => {
-    const { tabId, url, redirectUrl } = details;
-    if (tabId < 0 || !tabData[tabId]) return;
+    if (details.tabId < 0) return;
+    const data = getTabData(details.tabId);
+    const fromBase = getBaseDomain(getHostname(details.url));
+    const toBase   = getBaseDomain(getHostname(details.redirectUrl));
+    if (!fromBase || !toBase || fromBase === toBase) return;
 
-    const originDomain   = getRootDomain(url);
-    const redirectDomain = getRootDomain(redirectUrl);
+    const suspicious =
+      data.mainDomain &&
+      toBase !== data.mainDomain &&
+      details.type === "main_frame";
 
-    if (originDomain && redirectDomain && originDomain !== redirectDomain) {
-      tabData[tabId].hijackingThreats.push(
-        `Redirecionamento de ${originDomain} para ${redirectDomain}`
-      );
-      tabData[tabId].privacyScore = calcularScore(tabData[tabId]);
-    }
+    data.hijacking.redirects.push({
+      from: details.url.slice(0, 200),
+      to: details.redirectUrl.slice(0, 200),
+      fromBase,
+      toBase,
+      type: details.type,
+      suspicious
+    });
   },
   { urls: ["<all_urls>"] }
 );
 
-// Recebe mensagens do content script e do popup
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  const tabId = sender.tab ? sender.tab.id : -1;
+/* ---------- Privacy Score ---------- */
+function calcularScore(data) {
+  let score = 100;
 
-  if (message.action === "fingerprintDetectado") {
-    if (tabId >= 0 && tabData[tabId]) {
-      if (!tabData[tabId].fingerprintingCalls.includes(message.evento)) {
-        tabData[tabId].fingerprintingCalls.push(message.evento);
-        tabData[tabId].privacyScore = calcularScore(tabData[tabId]);
-      }
-    }
-    return false;
-  }
+  const tpHits = data.thirdPartyDomains.size;
+  score -= Math.min(tpHits * 2, 30);
 
-  if (message.action === "storageColetado") {
-    if (tabId >= 0 && tabData[tabId]) {
-      tabData[tabId].storageItems = message.items.map(
-        (i) => `${i.tipo} | ${i.chave} | ${i.tamanho} bytes`
-      );
-      tabData[tabId].privacyScore = calcularScore(tabData[tabId]);
-    }
-    return false;
-  }
+  const tpc = data.cookies.thirdParty.length;
+  score -= Math.min(tpc, 15);
 
-  if (message.action === "getData") {
-    const id = message.tabId;
-    if (!tabData[id]) initTab(id);
-    sendResponse(tabData[id]);
+  const sc = data.cookies.superCookies.length;
+  score -= Math.min(sc * 5, 20);
+
+  let fpCats = 0;
+  if (data.fingerprinting.canvas > 0) fpCats++;
+  if (data.fingerprinting.webgl  > 0) fpCats++;
+  if (data.fingerprinting.audio  > 0) fpCats++;
+  score -= fpCats * 10;
+
+  const csCount = data.cookieSyncing.length;
+  score -= Math.min(csCount * 3, 15);
+
+  const hjCount = data.hijacking.suspiciousScripts.length;
+  score -= Math.min(hjCount * 5, 20);
+
+  const srCount = data.hijacking.redirects.filter((r) => r.suspicious).length;
+  score -= Math.min(srCount * 3, 15);
+
+  return Math.max(0, Math.min(100, score));
+}
+
+/* ---------- Serializacao para o popup ---------- */
+function serialize(d) {
+  return {
+    url: d.url,
+    mainDomain: d.mainDomain,
+    thirdPartyDomains: Array.from(d.thirdPartyDomains.entries()).map(([host, e]) => ({
+      domain: host,
+      baseDomain: e.baseDomain,
+      types: Array.from(e.types),
+      count: e.count,
+      urls: e.urls
+    })),
+    cookies: d.cookies,
+    storage: d.storage,
+    fingerprinting: d.fingerprinting,
+    hijacking: d.hijacking,
+    cookieSyncing: d.cookieSyncing,
+    requestCount: d.requestCount,
+    privacyScore: calcularScore(d)
+  };
+}
+
+/* ---------- Mensagens ---------- */
+browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!sender.tab && msg && msg.type === "GET_TAB_DATA") {
+    browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+      if (!tabs[0]) { sendResponse(null); return; }
+      sendResponse(serialize(getTabData(tabs[0].id)));
+    });
     return true;
   }
-});
 
-// Limpa dados quando uma nova pagina carrega
-browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.status === "loading") {
-    initTab(tabId);
+  if (!sender.tab) return;
+  const data = getTabData(sender.tab.id);
+
+  if (msg.type === "STORAGE_REPORT") {
+    data.storage = msg.payload;
+  } else if (msg.type === "FINGERPRINT") {
+    if (msg.api === "canvas") data.fingerprinting.canvas++;
+    else if (msg.api === "webgl") data.fingerprinting.webgl++;
+    else if (msg.api === "audio") data.fingerprinting.audio++;
+    if (data.fingerprinting.details.length < 60) {
+      data.fingerprinting.details.push({
+        api: msg.api,
+        method: msg.method,
+        stackHead: (msg.stack || "").split("\n").slice(0, 2).join(" | ").slice(0, 200)
+      });
+    }
+  } else if (msg.type === "SUSPICIOUS_SCRIPT") {
+    data.hijacking.suspiciousScripts.push(msg.payload);
   }
 });
 
-// Limpa dados quando a aba e fechada
-browser.tabs.onRemoved.addListener((tabId) => {
-  delete tabData[tabId];
-});
+browser.tabs.onRemoved.addListener((tabId) => tabData.delete(tabId));
+
+console.log("[PrivacyMonitor] background carregado");
